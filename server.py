@@ -21,14 +21,14 @@ async def sub_to_lobby(websocket):
     print(lobbies[key])
     # Notify other people waiting for lobby leaderboard of new entry
     if len(lobbies[key]) > 0:
-        broadcast(lobbies[key], "Refresh lobby!")
+        broadcast(lobbies[key], "refresh")
 
     try:
         lobbies[key].add(websocket)
 
-        await websocket.send(f"Subscribed to {lobby}/{prompt}")
+        await websocket.send(f"ack {lobby}/{prompt}")
         await websocket.wait_closed()
-        
+
     finally:
         lobbies[key].remove(websocket)
 
