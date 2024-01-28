@@ -1,0 +1,25 @@
+<html>
+
+<head>
+    <script>
+        const exampleSocket = new WebSocket(
+            "ws://localhost:8765",
+        );
+
+        exampleSocket.onopen = (event) => {
+            exampleSocket.send("Here's some text that the server is urgently awaiting!");
+        }
+        
+        exampleSocket.onmessage = (event) => {
+            console.log(event.data);
+        };
+    </script>
+</head>
+
+<body>
+
+    Testing!
+
+</body>
+
+</html>
