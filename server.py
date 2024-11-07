@@ -58,7 +58,10 @@ async def sub_to_leaderboard(ws, lobby_id, prompt_id):
     if key not in leaderboards:
         leaderboards[key] = set()
 
+
     leaderboards[key].add(ws)
+
+    # print(f"{len(leaderboards[key])} subbed to Lobby #{lobby_id} Prompt #{prompt_id}")
 
     try:
         # await websocket.send(f"ack {lobby_id}/{prompt_id}")
@@ -66,15 +69,19 @@ async def sub_to_leaderboard(ws, lobby_id, prompt_id):
 
     finally:
         leaderboards[key].remove(ws)
-        if len(leaderboards[key] == 0):
+        if len(leaderboards[key]) == 0:
             del leaderboards[key]
 
 
 async def update_leaderboard(ws, lobby_id, prompt_id):
     key = (lobby_id, prompt_id)
-    if len(leaderboards[key]) > 0:
-        await broadcast(leaderboards[key], "refresh")
-    await ws.close()
+
+    # print(f"Update for Lobby #{lobby_id} Prompt #{prompt_id}")
+
+    if key in leaderboards and len(leaderboards[key]) > 0:
+        broadcast(leaderboards[key], "refresh")
+    
+    return await ws.close()
 
 
 async def connect(websocket):
@@ -94,11 +101,12 @@ async def connect(websocket):
     elif msgType == "update":
         await update_leaderboard(websocket, lobby, prompt)
     else:
+        print("Invalid Message type: '{msgType}'")
         await websocket.close(reason="invalid message type")
 
 
 async def main():
-    async with serve(connect, "localhost", 9000):
+    async with serve(connect, "localhost", 8000):
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
