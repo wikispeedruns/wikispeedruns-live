@@ -19,7 +19,7 @@ them.
 Client intially sends a message upon getting ready to play the prompt
 ```
 {
-    "type": "play",
+    "type": "wait_start",
     "user": "dan",
     "lobby_id": 10,
     "prompt_id": 5,
@@ -27,22 +27,19 @@ Client intially sends a message upon getting ready to play the prompt
 ```
 
 If this is the first client, the server creates an entry for this lobby prompt,
-which includes an array indicating which users are ready and which can force 
-the game to start. It returns a list of players. TODO, currently, any user can
-start the game
+which includes an array indicating which users are waiting.
 
-Clients can send messages of the form
+The host can then send a message of the form
 ```
 {
-    "ready": true, // or false
+    "type": "start", 
 }
 ```
-to indicate whether they are ready to start the prompt. If all clients indicate they 
-are ready, then the prompt starts. The server broadcasts this message to other clients
-in the lobby so they can update the list of who isn't ready.
+to indicate whether they are ready to start the prompt. The server broadcasts this 
+message to other clients so they can start the prompt.
 
 
-### 2. Lobby Prompt Leaderboard Finishing
+### 2. Leaderboard Updating
 
 When a client views the leaderboard, it establishes a connection to
 the server
@@ -55,16 +52,34 @@ the server
 ```
 
 The server keeps track of which users are connected to the server, and when
-a client finishes a prompt, it sends a signal to the server which updates
+a client updates their run, it sends a signal to the server which updates
 each other client subscribed to the leaderboard, which causes them to refresh
 the leaderboard.
 
-TODO: show partial prompts too! And refresh on click instead.
-
 ```
 {
-    "type": "update"
+    "type": "leaderboard_update"
     "lobby_id": 10,
     "prompt_id": 5, 
 }
 ```
+
+### 3. Lobby Prompt Updating
+
+Similar to above, if the host adds a prompt, we want to update users to refresh
+their page. This is accomplished with 2 messages.
+
+```
+{
+    "type": "lobby_prompts"
+    "lobby_id": 10,
+}
+```
+
+to establish a connection, and on the same connection
+
+{
+    "type": "lobby_prompts_update"
+}
+
+to force an update to other clients.
