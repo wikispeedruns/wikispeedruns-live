@@ -1,12 +1,16 @@
 import asyncio
 import json
 
+import websockets
 from websockets.server import serve
 from websockets import broadcast
 
 
+# Data structure for lobby pormpts, keyed by lobby_id
+lobbys = {}
+
 # Data structure for lobby starts, keyed by (lobby_id, prompt_id)
-prompts = {}
+prompt_starts = {}
 
 # Data structure for leaderboard subscriptions, keyed by (lobby_id, prompt_id)
 leaderboards = {}
@@ -17,8 +21,8 @@ async def wait_for_start(ws, lobby_id, prompt_id, user):
 
     print(f"{user} waiting to start for Lobby #{lobby_id} Prompt #{prompt_id}")
 
-    if key not in prompts:
-        prompts[key] = {
+    if key not in prompt_starts:
+        prompt_starts[key] = {
             "users": set(),
             "connections": set()
         } # TODO don't use a dict here lol
@@ -27,15 +31,15 @@ async def wait_for_start(ws, lobby_id, prompt_id, user):
     # just change their username to "also user" for the user list
     # Will just keep on prepending "also" # TODO maybe something better
     # Note if we don't do this we could accidentally delete users twice
-    while user in prompts[key]["users"]:
+    while user in prompt_starts[key]["users"]:
         user = "also " + user
 
-    prompts[key]["connections"].add(ws)
-    prompts[key]["users"].add(user) # ready status
+    prompt_starts[key]["connections"].add(ws)
+    prompt_starts[key]["users"].add(user) # ready status
 
-    broadcast(prompts[key]["connections"], json.dumps({
+    broadcast(prompt_starts[key]["connections"], json.dumps({
         "type": "update",
-        "users": list(prompts[key]["users"])
+        "users": list(prompt_starts[key]["users"])
     }))
 
     try:
@@ -45,30 +49,27 @@ async def wait_for_start(ws, lobby_id, prompt_id, user):
 
             # TODO enforce that this only happens for host
             if (msg["type"] == "start"):
-                broadcast(prompts[key]["connections"], json.dumps({"type": "start"})) 
+                broadcast(prompt_starts[key]["connections"], json.dumps({"type": "start"})) 
             
     finally:
-        prompts[key]["connections"].remove(ws)
-        prompts[key]["users"].remove(user)
+        prompt_starts[key]["connections"].remove(ws)
+        prompt_starts[key]["users"].remove(user)
 
-        if len(prompts[key]["connections"]) == 0:
-            del prompts[key]
+        if len(prompt_starts[key]["connections"]) == 0:
+            del prompt_starts[key]
 
         else: 
             # If there are still players in the lobby, update list of players
-            broadcast(prompts[key]["connections"], json.dumps({
+            broadcast(prompt_starts[key]["connections"], json.dumps({
                 "type": "update",
-                "users": list(prompts[key]["users"])
+                "users": list(prompt_starts[key]["users"])
             }))
-    
 
-    
 
 async def sub_to_leaderboard(ws, lobby_id, prompt_id):
     key = (lobby_id, prompt_id)
     if key not in leaderboards:
         leaderboards[key] = set()
-
 
     leaderboards[key].add(ws)
 
@@ -94,6 +95,27 @@ async def update_leaderboard(ws, lobby_id, prompt_id):
     return await ws.close()
 
 
+async def sub_to_lobby_prompts(ws, lobby_id):
+    key = lobby_id
+    if key not in lobbys:
+        lobbys[key] = set()
+
+    lobbys[key].add(ws)
+
+    try:
+        while True:
+            msg = await ws.recv()
+            msg = json.loads(msg)
+            print(msg)
+            if (msg["type"] == "lobby_prompts_update"):
+                # print("Triggering lobby ")
+                broadcast(lobbys[key], "refresh") 
+    finally:
+        lobbys[key].remove(ws)
+        if len(lobbys[key]) == 0:
+            del lobbys[key]
+
+
 async def connect(websocket):
     message = await websocket.recv()
     message = json.loads(message)
@@ -102,18 +124,31 @@ async def connect(websocket):
     # TODO exceptions?
     msgType = message["type"]
     lobby = message["lobby_id"]
-    prompt = message["prompt_id"]
 
-    if msgType == "wait_start":
-        user = message["user"]
-        await wait_for_start(websocket, lobby, prompt, user)
-    elif msgType == "leaderboard":
-        await sub_to_leaderboard(websocket, lobby, prompt)
-    elif msgType == "update":
-        await update_leaderboard(websocket, lobby, prompt)
-    else:
-        print(f"Invalid Message type: '{msgType}'")
-        await websocket.close(reason="invalid message type")
+    try:
+        if msgType == "wait_start":
+            user = message["user"]
+            prompt = message["prompt_id"]
+            await wait_for_start(websocket, lobby, prompt, user)
+
+        elif msgType == "leaderboard":
+            prompt = message["prompt_id"]
+            await sub_to_leaderboard(websocket, lobby, prompt)
+
+        elif msgType == "leaderboard_update":
+            prompt = message["prompt_id"]
+            await update_leaderboard(websocket, lobby, prompt)
+
+        elif msgType == "lobby_prompts":
+            await sub_to_lobby_prompts(websocket, lobby)
+
+        else:
+            print(f"Invalid message type: '{msgType}'")
+            await websocket.close(reason="invalid message type")
+    
+    except websockets.exceptions.WebSocketException as e:
+        print(f"Websocket error: '{e}'")
+ 
 
 
 async def main():
